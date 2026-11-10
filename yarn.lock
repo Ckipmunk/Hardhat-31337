@@ -4307,7 +4307,7 @@ __metadata:
     eslint-plugin-prettier: "npm:^5.2.4"
     ethers: "npm:^6.13.2"
     hardhat: "npm:^3.4.5"
-    hardhat-deploy: "npm:^2.0.6"
+    hardhat-deploy: "npm:2.0.6"
     mocha: "npm:^11"
     prettier: "npm:^3.5.3"
     prettier-plugin-solidity: "npm:^1.4.1"
@@ -8353,6 +8353,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"commander@npm:^14.0.3":
+  version: 14.0.3
+  resolution: "commander@npm:14.0.3"
+  checksum: 10/dfa9ebe2a433d277de5cb0252d23b10a543d245d892db858d23b516336a835c50fd4f52bee4cd13c705cc8acb6f03dc632c73dd806f7d06d3353eb09953dd17a
+  languageName: node
+  linkType: hard
+
 "commander@npm:^15.0.0":
   version: 15.0.0
   resolution: "commander@npm:15.0.0"
@@ -10847,22 +10854,22 @@ __metadata:
   languageName: node
   linkType: hard
 
-"hardhat-deploy@npm:^2.0.6":
-  version: 2.3.0
-  resolution: "hardhat-deploy@npm:2.3.0"
+"hardhat-deploy@npm:2.0.6":
+  version: 2.0.6
+  resolution: "hardhat-deploy@npm:2.0.6"
   dependencies:
     "@nomicfoundation/hardhat-zod-utils": "npm:^3.0.4"
-    commander: "npm:^15.0.0"
+    commander: "npm:^14.0.3"
     named-logs: "npm:^0.4.1"
     named-logs-console: "npm:^0.5.1"
     zod: "npm:^3.25.76"
   peerDependencies:
-    "@rocketh/node": ^0.22.4
-    hardhat: ^3.6.0
-    rocketh: ^0.26.2
+    "@rocketh/node": ^0.19.5
+    hardhat: ^3.4.4
+    rocketh: ^0.19.5
   bin:
     hardhat-deploy: dist/cli.js
-  checksum: 10/cc0015cf554135901264c09f16e2bc8b1b1b7ee12d5ded0661eae0e6780f71e6c561c8182e05dcb9cc84170ba1b5a35f2cb969307bf6307d0643909c27dd025b
+  checksum: 10/f1c0cb1a7d99bf9691a7c272575aab4cc983d0a6e7c93c438f1b3b9bdafff5399fd89de336ca4406e8defd39207323ac94cb793632eb4626796c5dadd9439648
   languageName: node
   linkType: hard
 

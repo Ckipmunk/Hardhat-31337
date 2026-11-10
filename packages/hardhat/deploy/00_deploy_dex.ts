@@ -34,11 +34,11 @@ export default deployScript(
     // const frontendAddress = "YOUR_FRONTEND_ADDRESS";
     // await execute(balloons, { functionName: "transfer", args: [frontendAddress, parseEther("10")], account: deployer });
 
-    // // CHECKPOINT 3: Uncomment to init DEX on deploy:
-    // console.log("Approving DEX (" + dex.address + ") to take Balloons from main account...");
-    // await execute(balloons, { functionName: "approve", args: [dex.address, parseEther("100")], account: deployer });
-    // console.log("INIT exchange...");
-    // await execute(dex, { functionName: "init", args: [parseEther("5")], value: parseEther("5"), account: deployer });
+    // CHECKPOINT 3: Auto init DEX on deploy:
+    console.log("Approving DEX (" + dex.address + ") to take Balloons from main account...");
+    await execute(balloons, { functionName: "approve", args: [dex.address, parseEther("100")], account: deployer });
+    console.log("INIT exchange...");
+    await execute(dex, { functionName: "init", args: [parseEther("5")], value: parseEther("5"), account: deployer });
   },
   // Tags are useful if you have multiple deploy files and only want to run one of them.
   // e.g. yarn deploy --tags DEX
