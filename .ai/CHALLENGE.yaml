@@ -1,0 +1,745 @@
+name: "DEX"
+version: "1.0"
+description: "Build a minimal constant-product AMM (like Uniswap v2) that swaps ETH for BAL tokens and supports liquidity provisioning"
+difficulty: "intermediate"
+estimated_time: "3 - 10 hours"
+
+setup:
+  file:
+    hardhat: "packages/hardhat/contracts/DEX.sol"
+    foundry: "packages/foundry/contracts/DEX.sol"
+
+welcome_message: |
+  Welcome to the DEX Challenge!
+
+  You'll build a **decentralized exchange** — a minimal constant-product automated market maker (AMM) like Uniswap v2. The DEX holds reserves of ETH and $BAL tokens, and uses the formula `x * y = k` to price trades.
+
+  You'll learn:
+  1. How liquidity pools work with `init()` and liquidity tracking
+  2. The constant-product pricing formula with trading fees
+  3. How token swaps work (`ethToToken` and `tokenToEth`)
+  4. How liquidity providers deposit and withdraw proportionally
+
+  **Before we start, open separate terminal windows** (not this one!) and run:
+
+  1. Start your local blockchain:
+     ```
+     yarn chain
+     ```
+  2. In another terminal, deploy the contracts:
+     ```
+     yarn deploy
+     ```
+  3. In another terminal, start the frontend:
+     ```
+     yarn start
+     ```
+  4. Open http://localhost:3000 in your browser.
+
+  > These commands run continuously, so each needs its own terminal window.
+
+  **How this works:**
+  - I'll teach you a concept, then give you a coding task
+  - You write the code in your editor, then say **"check"** and I'll run the tests
+  - Say **"hint"** anytime you're stuck — hints get progressively more specific
+  - Use **`/skip`** if you want me to write the code and explain it
+
+  > Re-run `yarn deploy --reset` whenever you want to redeploy with a fresh contract address.
+
+  Your progress is saved automatically. Use `/start` to resume anytime.
+
+  Let's build a DEX!
+
+checkpoints:
+  # ============================================================
+  # CHECKPOINT 1: Reserves & init()
+  # ============================================================
+  - id: "reserves-init"
+    title: "Reserves & init()"
+    description: "Add state variables for liquidity tracking and implement init() to seed the pool"
+
+    context: |
+      ## How a Liquidity Pool Starts
+
+      A DEX needs **reserves** of both assets (ETH and $BAL) to enable trading. But before anyone can swap, someone has to provide that initial liquidity.
+
+      ### Tracking Liquidity
+
+      We need two pieces of state:
+      - `totalLiquidity` — the total pool liquidity (like total shares in a fund)
+      - `liquidity` mapping — each provider's share of the pool
+
+      ```solidity
+      uint256 public totalLiquidity;
+      mapping(address => uint256) public liquidity;
+      ```
+
+      ### The `init()` Function
+
+      `init(uint256 tokens)` seeds the pool for the first time. The caller sends ETH (via `msg.value`) and transfers $BAL tokens to the DEX. Key points:
+
+      - **Only works once** — revert with `DexAlreadyInitialized()` if `totalLiquidity != 0`
+      - **ETH arrives before your code runs** — `address(this).balance` already includes `msg.value` inside `init()`
+      - **Set initial liquidity** — `totalLiquidity` equals the ETH deposited; the initializer gets all the liquidity
+      - **Pull tokens** — use `token.transferFrom()` (requires the caller to have called `approve()` on the Balloons contract first). Revert with `TokenTransferFailed()` if the transfer returns false.
+
+      ### ERC20 `approve` + `transferFrom` Pattern
+
+      ERC20 tokens can't be "sent" to a contract like ETH. Instead:
+      1. User calls `token.approve(dexAddress, amount)` — grants permission
+      2. DEX calls `token.transferFrom(user, dex, amount)` — pulls the tokens
+
+      This two-step pattern prevents contracts from stealing tokens without permission.
+
+      ### `getLiquidity()`
+
+      The frontend and tests need a way to check any address's liquidity balance. Implement `getLiquidity(address lp)` to return `liquidity[lp]`.
+
+    questions:
+      - text: "Why does the DEX use transferFrom() instead of transfer() to get tokens from the user?"
+        concepts:
+          [
+            "approve",
+            "permission",
+            "allowance",
+            "pull",
+            "two-step",
+            "security",
+            "can't push",
+            "transferFrom",
+          ]
+        hint: "A contract can't move someone else's tokens without permission. How does ERC20 handle that?"
+
+    task:
+      description: |
+        Open `packages/hardhat/contracts/DEX.sol`.
+
+        **1. Add state variables** (in the State Variables section):
+        ```solidity
+        uint256 public totalLiquidity;
+        mapping(address => uint256) public liquidity;
+        ```
+
+        **2. Add custom errors** (in the Errors section):
+        ```solidity
+        error DexAlreadyInitialized();
+        error TokenTransferFailed();
+        ```
+
+        **3. Implement `init(uint256 tokens)`:**
+        - Revert with `DexAlreadyInitialized()` if `totalLiquidity != 0`
+        - Set `totalLiquidity` to `address(this).balance` (already includes `msg.value`)
+        - Give all initial liquidity to `msg.sender`
+        - Pull tokens with `token.transferFrom(msg.sender, address(this), tokens)` — revert with `TokenTransferFailed()` if it returns false
+        - Return the initial liquidity amount
+
+        **4. Implement `getLiquidity(address lp)`:**
+        - Return `liquidity[lp]`
+
+        ### Try it out
+
+        After writing the code:
+
+        1. **Deploy script**: Open `packages/hardhat/deploy/00_deploy_dex.ts`. Uncomment the line under "CHECKPOINT 2" that sends 10 BAL to your frontend address (paste in your actual frontend address from http://localhost:3000).
+        2. Run `yarn deploy --reset` to deploy your updated contracts.
+        3. Open http://localhost:3000 — navigate to the `Debug Contracts` tab. You should see `DEX` and `Balloons` contracts.
+        4. On the `Balloons` contract, call `approve()` with the DEX address as spender and 5 (* 10**18) as amount.
+        5. Get some ETH from the faucet, then on the `DEX` contract call `init()` with tokens = 5 (* 10**18) and payable value = 5 (* 10**18).
+        6. Go to http://localhost:3000/dex — verify the DEX shows ETH + $BAL reserves and your liquidity value is non-zero.
+
+        Say **"check"** when you're ready!
+      file:
+        hardhat: "packages/hardhat/contracts/DEX.sol"
+        foundry: "packages/foundry/contracts/DEX.sol"
+      test:
+        hardhat: "yarn test --grep 'Checkpoint2'"
+        foundry: "yarn test --match-test 'Checkpoint2'"
+      hints:
+        - "Start with the guard: `if (totalLiquidity != 0) revert DexAlreadyInitialized();`. Then set `totalLiquidity = address(this).balance;` and `liquidity[msg.sender] = totalLiquidity;`."
+        - |
+          For the token transfer:
+          ```solidity
+          if (!token.transferFrom(msg.sender, address(this), tokens)) revert TokenTransferFailed();
+          ```
+        - |
+          Full init():
+          ```solidity
+          function init(uint256 tokens) public payable returns (uint256 initialLiquidity) {
+              if (totalLiquidity != 0) revert DexAlreadyInitialized();
+              initialLiquidity = address(this).balance;
+              totalLiquidity = initialLiquidity;
+              liquidity[msg.sender] = initialLiquidity;
+              if (!token.transferFrom(msg.sender, address(this), tokens)) revert TokenTransferFailed();
+              return initialLiquidity;
+          }
+          ```
+      solution: |
+        // Errors section:
+        error DexAlreadyInitialized();
+        error TokenTransferFailed();
+
+        // State Variables section:
+        uint256 public totalLiquidity;
+        mapping(address => uint256) public liquidity;
+
+        function init(uint256 tokens) public payable returns (uint256 initialLiquidity) {
+            if (totalLiquidity != 0) revert DexAlreadyInitialized();
+            initialLiquidity = address(this).balance;
+            totalLiquidity = initialLiquidity;
+            liquidity[msg.sender] = initialLiquidity;
+            if (!token.transferFrom(msg.sender, address(this), tokens)) revert TokenTransferFailed();
+            return initialLiquidity;
+        }
+
+        function getLiquidity(address lp) public view returns (uint256 lpLiquidity) {
+            return liquidity[lp];
+        }
+
+  # ============================================================
+  # CHECKPOINT 2: Price Function
+  # ============================================================
+  - id: "price"
+    title: "Price Function"
+    description: "Implement the constant-product pricing formula with a 0.3% trading fee"
+
+    context: |
+      ## The Constant Product Formula
+
+      AMMs use the formula `x * y = k` where:
+      - `x` = reserve of one asset (e.g. ETH)
+      - `y` = reserve of the other asset (e.g. $BAL)
+      - `k` = the invariant (stays constant during trades)
+
+      When someone trades `xInput` of asset X, they receive `yOutput` of asset Y. The formula ensures that after the trade, the product of reserves still equals `k`:
+
+      ```
+      (x + xInput) * (y - yOutput) = k
+      ```
+
+      Solving for `yOutput`:
+      ```
+      yOutput = (xInput * yReserves) / (xReserves + xInput)
+      ```
+
+      ### Trading Fees
+
+      A 0.3% fee incentivizes liquidity providers. We apply it to the input:
+      - Multiply `xInput` by `997` (keeping 99.7%, deducting 0.3%)
+      - Divide by `1000` at the end
+
+      Why integers? Solidity has **no floating point numbers**. The 997/1000 trick gives us the same result as multiplying by 0.997.
+
+      The full formula:
+      ```
+      xInputWithFee = xInput * 997
+      numerator = xInputWithFee * yReserves
+      denominator = (xReserves * 1000) + xInputWithFee
+      yOutput = numerator / denominator
+      ```
+
+      ### Slippage
+
+      Large trades relative to the pool get worse prices — this is **slippage**. If you trade a lot of X, the ratio shifts heavily, and you get less Y per unit. This is a natural property of the `x * y = k` curve.
+
+    questions:
+      - text: "Why do we multiply xInput by 997 and xReserves by 1000 instead of just multiplying xInput by 0.997?"
+        concepts:
+          [
+            "no decimals",
+            "no floats",
+            "integer",
+            "solidity",
+            "whole numbers",
+            "multiply then divide",
+            "997",
+            "1000",
+          ]
+        hint: "What types of numbers does Solidity support? What happens if you try to multiply by 0.997?"
+
+    task:
+      description: |
+        Open `packages/hardhat/contracts/DEX.sol`.
+
+        Implement `price(uint256 xInput, uint256 xReserves, uint256 yReserves)`:
+
+        1. Calculate `xInputWithFee = xInput * 997`
+        2. Calculate `numerator = xInputWithFee * yReserves`
+        3. Calculate `denominator = (xReserves * 1000) + xInputWithFee`
+        4. Return `numerator / denominator`
+
+        This is a `pure` function — it doesn't read or modify state, just does math.
+
+        ### Try it out
+
+        After writing the code:
+
+        1. **Deploy script**: Open `packages/hardhat/deploy/00_deploy_dex.ts`. Uncomment the "CHECKPOINT 3" section so the DEX is automatically initialized with liquidity on deploy.
+        2. Redeploy with `yarn deploy --reset`.
+        3. Go to http://localhost:3000/dex — type values into the swap inputs. The curve preview should move and show output estimates (including the 0.3% fee).
+        4. Try it in the Debug Contracts tab too: call `price()` with 1000000 ETH reserves, 1000000 token reserves, and 1000 input — you should get ~996 back (nearly 1:1 with fee + tiny slippage).
+
+        Say **"check"** when you're ready!
+      file:
+        hardhat: "packages/hardhat/contracts/DEX.sol"
+        foundry: "packages/foundry/contracts/DEX.sol"
+      test:
+        hardhat: "yarn test --grep 'Checkpoint3'"
+        foundry: "yarn test --match-test 'Checkpoint3'"
+      hints:
+        - "It's four lines of math. Start with `uint256 xInputWithFee = xInput * 997;` and work through the formula step by step."
+        - |
+          ```solidity
+          uint256 xInputWithFee = xInput * 997;
+          uint256 numerator = xInputWithFee * yReserves;
+          uint256 denominator = (xReserves * 1000) + xInputWithFee;
+          return numerator / denominator;
+          ```
+        - |
+          Full function:
+          ```solidity
+          function price(uint256 xInput, uint256 xReserves, uint256 yReserves) public pure returns (uint256 yOutput) {
+              uint256 xInputWithFee = xInput * 997;
+              uint256 numerator = xInputWithFee * yReserves;
+              uint256 denominator = (xReserves * 1000) + xInputWithFee;
+              return numerator / denominator;
+          }
+          ```
+      solution: |
+        function price(uint256 xInput, uint256 xReserves, uint256 yReserves) public pure returns (uint256 yOutput) {
+            uint256 xInputWithFee = xInput * 997;
+            uint256 numerator = xInputWithFee * yReserves;
+            uint256 denominator = (xReserves * 1000) + xInputWithFee;
+            return numerator / denominator;
+        }
+
+  # ============================================================
+  # CHECKPOINT 3: Trading (ethToToken + tokenToEth)
+  # ============================================================
+  - id: "swapping"
+    title: "Trading"
+    description: "Implement ethToToken() and tokenToEth() swap functions"
+
+    context: |
+      ## Swapping Assets
+
+      Now that we have a price function, we can implement actual swaps. There are two directions:
+      - `ethToToken()` — user sends ETH, receives $BAL
+      - `tokenToEth(tokenInput)` — user sends $BAL, receives ETH
+
+      ### Key Insight: Reserve Calculation
+
+      When computing the price, you need reserves **before** the swap input is counted:
+
+      For `ethToToken()`: the contract's ETH balance already includes `msg.value` (it arrives before your code runs), so:
+      ```solidity
+      uint256 ethReserve = address(this).balance - msg.value;
+      ```
+
+      For `tokenToEth()`: tokens haven't been transferred yet, so `token.balanceOf(address(this))` is the correct pre-swap reserve.
+
+      ### Sending ETH from a Contract
+
+      To send ETH to the swapper in `tokenToEth()`:
+      ```solidity
+      (bool sent, ) = msg.sender.call{value: ethOutput}("");
+      ```
+      Always check the return value and revert if it fails.
+
+      ### Validation and Custom Errors
+
+      Each swap function should validate inputs and check allowances/balances:
+      - `InvalidEthAmount()` — if `msg.value == 0` in `ethToToken()`
+      - `InvalidTokenAmount()` — if `tokenInput == 0` in `tokenToEth()`
+      - `InsufficientTokenBalance(available, required)` — if user doesn't have enough tokens
+      - `InsufficientTokenAllowance(available, required)` — if DEX isn't approved to spend enough tokens
+      - `EthTransferFailed(to, amount)` — if sending ETH fails
+
+      ### Events
+
+      Emit events so the frontend can track swaps:
+      ```solidity
+      event EthToTokenSwap(address swapper, uint256 tokenOutput, uint256 ethInput);
+      event TokenToEthSwap(address swapper, uint256 tokensInput, uint256 ethOutput);
+      ```
+
+    questions:
+      - text: "In ethToToken(), why do we subtract msg.value from address(this).balance to get the ETH reserve?"
+        concepts:
+          [
+            "already includes",
+            "msg.value",
+            "before",
+            "arrives first",
+            "pre-swap",
+            "balance includes",
+          ]
+        hint: "When does the ETH from msg.value arrive in the contract — before or after your function code runs?"
+
+    task:
+      description: |
+        Open `packages/hardhat/contracts/DEX.sol`.
+
+        **1. Add events** (in the Events section):
+        ```solidity
+        event EthToTokenSwap(address swapper, uint256 tokenOutput, uint256 ethInput);
+        event TokenToEthSwap(address swapper, uint256 tokensInput, uint256 ethOutput);
+        ```
+
+        **2. Add custom errors** (in the Errors section — `TokenTransferFailed` should already exist):
+        ```solidity
+        error InvalidEthAmount();
+        error InvalidTokenAmount();
+        error InsufficientTokenBalance(uint256 available, uint256 required);
+        error InsufficientTokenAllowance(uint256 available, uint256 required);
+        error EthTransferFailed(address to, uint256 amount);
+        ```
+
+        **3. Implement `ethToToken()`:**
+        - Revert with `InvalidEthAmount()` if `msg.value == 0`
+        - Calculate ETH reserve as `address(this).balance - msg.value`
+        - Get token reserve with `token.balanceOf(address(this))`
+        - Use `price()` to compute output
+        - Transfer tokens to sender; revert with `TokenTransferFailed()` on failure
+        - Emit `EthToTokenSwap`
+
+        **4. Implement `tokenToEth(uint256 tokenInput)`:**
+        - Revert with `InvalidTokenAmount()` if `tokenInput == 0`
+        - Check user's token balance and allowance; revert with appropriate errors
+        - Get token reserve and ETH reserve (`address(this).balance`)
+        - Use `price()` to compute ETH output
+        - Pull tokens with `transferFrom`; send ETH with `call`
+        - Emit `TokenToEthSwap`
+
+        ### Try it out
+
+        After writing the code, go to http://localhost:3000/dex and try:
+
+        - **ETH → Token**: enter some ETH and click swap
+        - **Token → ETH**: first approve the DEX to spend your $BAL (in the Balloons section), then swap tokens back to ETH
+        - Check the **Events** tab to make sure swap events are showing up.
+
+        Say **"check"** when you're ready!
+      file:
+        hardhat: "packages/hardhat/contracts/DEX.sol"
+        foundry: "packages/foundry/contracts/DEX.sol"
+      test:
+        hardhat: "yarn test --grep 'Checkpoint4'"
+        foundry: "yarn test --match-test 'Checkpoint4'"
+      hints:
+        - |
+          For ethToToken(), the reserve trick is key:
+          ```solidity
+          uint256 ethReserve = address(this).balance - msg.value;
+          uint256 tokenReserve = token.balanceOf(address(this));
+          tokenOutput = price(msg.value, ethReserve, tokenReserve);
+          ```
+        - |
+          For tokenToEth(), check balance and allowance before computing:
+          ```solidity
+          uint256 bal = token.balanceOf(msg.sender);
+          if (bal < tokenInput) revert InsufficientTokenBalance(bal, tokenInput);
+          uint256 allow = token.allowance(msg.sender, address(this));
+          if (allow < tokenInput) revert InsufficientTokenAllowance(allow, tokenInput);
+          ```
+        - |
+          Full ethToToken():
+          ```solidity
+          function ethToToken() public payable returns (uint256 tokenOutput) {
+              if (msg.value == 0) revert InvalidEthAmount();
+              uint256 ethReserve = address(this).balance - msg.value;
+              uint256 tokenReserve = token.balanceOf(address(this));
+              tokenOutput = price(msg.value, ethReserve, tokenReserve);
+              if (!token.transfer(msg.sender, tokenOutput)) revert TokenTransferFailed();
+              emit EthToTokenSwap(msg.sender, tokenOutput, msg.value);
+              return tokenOutput;
+          }
+          ```
+
+          Full tokenToEth():
+          ```solidity
+          function tokenToEth(uint256 tokenInput) public returns (uint256 ethOutput) {
+              if (tokenInput == 0) revert InvalidTokenAmount();
+              uint256 bal = token.balanceOf(msg.sender);
+              if (bal < tokenInput) revert InsufficientTokenBalance(bal, tokenInput);
+              uint256 allow = token.allowance(msg.sender, address(this));
+              if (allow < tokenInput) revert InsufficientTokenAllowance(allow, tokenInput);
+              uint256 tokenReserve = token.balanceOf(address(this));
+              ethOutput = price(tokenInput, tokenReserve, address(this).balance);
+              if (!token.transferFrom(msg.sender, address(this), tokenInput)) revert TokenTransferFailed();
+              (bool sent, ) = msg.sender.call{value: ethOutput}("");
+              if (!sent) revert EthTransferFailed(msg.sender, ethOutput);
+              emit TokenToEthSwap(msg.sender, tokenInput, ethOutput);
+              return ethOutput;
+          }
+          ```
+      solution: |
+        // Events section:
+        event EthToTokenSwap(address swapper, uint256 tokenOutput, uint256 ethInput);
+        event TokenToEthSwap(address swapper, uint256 tokensInput, uint256 ethOutput);
+
+        // Errors section (add to existing):
+        error InvalidEthAmount();
+        error InvalidTokenAmount();
+        error InsufficientTokenBalance(uint256 available, uint256 required);
+        error InsufficientTokenAllowance(uint256 available, uint256 required);
+        error EthTransferFailed(address to, uint256 amount);
+
+        function ethToToken() public payable returns (uint256 tokenOutput) {
+            if (msg.value == 0) revert InvalidEthAmount();
+            uint256 ethReserve = address(this).balance - msg.value;
+            uint256 tokenReserve = token.balanceOf(address(this));
+            tokenOutput = price(msg.value, ethReserve, tokenReserve);
+            if (!token.transfer(msg.sender, tokenOutput)) revert TokenTransferFailed();
+            emit EthToTokenSwap(msg.sender, tokenOutput, msg.value);
+            return tokenOutput;
+        }
+
+        function tokenToEth(uint256 tokenInput) public returns (uint256 ethOutput) {
+            if (tokenInput == 0) revert InvalidTokenAmount();
+            uint256 bal = token.balanceOf(msg.sender);
+            if (bal < tokenInput) revert InsufficientTokenBalance(bal, tokenInput);
+            uint256 allow = token.allowance(msg.sender, address(this));
+            if (allow < tokenInput) revert InsufficientTokenAllowance(allow, tokenInput);
+            uint256 tokenReserve = token.balanceOf(address(this));
+            ethOutput = price(tokenInput, tokenReserve, address(this).balance);
+            if (!token.transferFrom(msg.sender, address(this), tokenInput)) revert TokenTransferFailed();
+            (bool sent, ) = msg.sender.call{value: ethOutput}("");
+            if (!sent) revert EthTransferFailed(msg.sender, ethOutput);
+            emit TokenToEthSwap(msg.sender, tokenInput, ethOutput);
+            return ethOutput;
+        }
+
+  # ============================================================
+  # CHECKPOINT 4: Liquidity (deposit + withdraw)
+  # ============================================================
+  - id: "liquidity"
+    title: "Liquidity"
+    description: "Implement deposit() and withdraw() for liquidity providers"
+
+    context: |
+      ## Liquidity Provisioning
+
+      So far, only `init()` can add liquidity. For a real DEX, **anyone** should be able to add or remove liquidity proportionally.
+
+      ### `deposit()`
+
+      When depositing, the provider sends ETH and must also provide $BAL tokens in the correct ratio to keep `x * y = k` balanced.
+
+      The token amount required:
+      ```solidity
+      uint256 tokenDeposit = (msg.value * tokenReserve / ethReserve) + 1;
+      ```
+
+      Why `+ 1`? Solidity integer division rounds down. Adding 1 "rounds up" by 1 wei, ensuring the depositor never provides *less* than proportional tokens (which would slightly dilute the pool).
+
+      The liquidity minted (new LP shares):
+      ```solidity
+      uint256 liquidityMinted = msg.value * totalLiquidity / ethReserve;
+      ```
+
+      This is proportional — if you deposit 10% of the ETH reserve, you get 10% of the total liquidity.
+
+      ### `withdraw(uint256 amount)`
+
+      To withdraw, a provider burns their LP tokens and receives both ETH and $BAL proportional to their share:
+      ```solidity
+      uint256 ethWithdrawn = amount * ethReserve / totalLiquidity;
+      uint256 tokensWithdrawn = amount * tokenReserve / totalLiquidity;
+      ```
+
+      Then decrease their liquidity balance and `totalLiquidity`, send ETH with `call`, and transfer tokens with `token.transfer()`.
+
+      ### Events and Errors
+
+      ```solidity
+      event LiquidityProvided(address liquidityProvider, uint256 liquidityMinted, uint256 ethInput, uint256 tokensInput);
+      event LiquidityRemoved(address liquidityRemover, uint256 liquidityWithdrawn, uint256 tokensOutput, uint256 ethOutput);
+      error InsufficientLiquidity(uint256 available, uint256 required);
+      ```
+
+      Revert with `InsufficientLiquidity` if a user tries to withdraw more LP tokens than they have.
+
+    questions:
+      - text: "Why do we add + 1 when calculating the token deposit amount in deposit()?"
+        concepts:
+          [
+            "rounding",
+            "round down",
+            "integer division",
+            "round up",
+            "1 wei",
+            "conservative",
+            "dilute",
+          ]
+        hint: "What direction does Solidity integer division round? What would happen if the depositor provided slightly fewer tokens than the true proportional amount?"
+
+    task:
+      description: |
+        Open `packages/hardhat/contracts/DEX.sol`.
+
+        **1. Add events** (in the Events section):
+        ```solidity
+        event LiquidityProvided(address liquidityProvider, uint256 liquidityMinted, uint256 ethInput, uint256 tokensInput);
+        event LiquidityRemoved(address liquidityRemover, uint256 liquidityWithdrawn, uint256 tokensOutput, uint256 ethOutput);
+        ```
+
+        **2. Add custom error** (in the Errors section):
+        ```solidity
+        error InsufficientLiquidity(uint256 available, uint256 required);
+        ```
+
+        **3. Implement `deposit()`:**
+        - Revert with `InvalidEthAmount()` if `msg.value == 0`
+        - Calculate `ethReserve = address(this).balance - msg.value` and `tokenReserve`
+        - Calculate `tokenDeposit = (msg.value * tokenReserve / ethReserve) + 1`
+        - Check user's token balance and allowance (revert with appropriate errors)
+        - Calculate `liquidityMinted = msg.value * totalLiquidity / ethReserve`
+        - Update `liquidity[msg.sender]` and `totalLiquidity`
+        - Pull tokens with `transferFrom`; emit `LiquidityProvided`
+
+        **4. Implement `withdraw(uint256 amount)`:**
+        - Revert with `InsufficientLiquidity` if user's liquidity < amount
+        - Calculate `ethWithdrawn = amount * ethReserve / totalLiquidity`
+        - Calculate `tokensWithdrawn = amount * tokenReserve / totalLiquidity`
+        - Decrease `liquidity[msg.sender]` and `totalLiquidity`
+        - Send ETH with `call`; transfer tokens with `token.transfer()`
+        - Emit `LiquidityRemoved`
+
+        ### Try it out
+
+        After writing the code:
+
+        1. Redeploy with `yarn deploy --reset`, then go to http://localhost:3000/dex and try:
+           - Approve the DEX to spend your $BAL
+           - Deposit some ETH (observe that it also pulls the proportional amount of tokens)
+           - Withdraw some liquidity and verify you receive both ETH and $BAL back
+        2. Check the **Events** tab to make sure liquidity events are showing up.
+
+        Say **"check"** when you're ready!
+      file:
+        hardhat: "packages/hardhat/contracts/DEX.sol"
+        foundry: "packages/foundry/contracts/DEX.sol"
+      test:
+        hardhat: "yarn test --grep 'Checkpoint5'"
+        foundry: "yarn test --match-test 'Checkpoint5'"
+      hints:
+        - |
+          For deposit(), the key formulas are:
+          ```solidity
+          uint256 tokenDeposit = (msg.value * tokenReserve / ethReserve) + 1;
+          uint256 liquidityMinted = msg.value * totalLiquidity / ethReserve;
+          ```
+        - |
+          For withdraw(), calculate proportional shares:
+          ```solidity
+          uint256 ethWithdrawn = amount * ethReserve / totalLiquidity;
+          uint256 tokensWithdrawn = amount * tokenReserve / totalLiquidity;
+          ```
+          Then decrease balances before sending to prevent reentrancy.
+        - |
+          Full deposit():
+          ```solidity
+          function deposit() public payable returns (uint256 tokensDeposited) {
+              if (msg.value == 0) revert InvalidEthAmount();
+              uint256 ethReserve = address(this).balance - msg.value;
+              uint256 tokenReserve = token.balanceOf(address(this));
+              uint256 tokenDeposit = (msg.value * tokenReserve / ethReserve) + 1;
+              uint256 bal = token.balanceOf(msg.sender);
+              if (bal < tokenDeposit) revert InsufficientTokenBalance(bal, tokenDeposit);
+              uint256 allow = token.allowance(msg.sender, address(this));
+              if (allow < tokenDeposit) revert InsufficientTokenAllowance(allow, tokenDeposit);
+              uint256 liquidityMinted = msg.value * totalLiquidity / ethReserve;
+              liquidity[msg.sender] += liquidityMinted;
+              totalLiquidity += liquidityMinted;
+              if (!token.transferFrom(msg.sender, address(this), tokenDeposit)) revert TokenTransferFailed();
+              emit LiquidityProvided(msg.sender, liquidityMinted, msg.value, tokenDeposit);
+              return tokenDeposit;
+          }
+          ```
+
+          Full withdraw():
+          ```solidity
+          function withdraw(uint256 amount) public returns (uint256 ethAmount, uint256 tokenAmount) {
+              uint256 availableLp = liquidity[msg.sender];
+              if (availableLp < amount) revert InsufficientLiquidity(availableLp, amount);
+              uint256 ethReserve = address(this).balance;
+              uint256 tokenReserve = token.balanceOf(address(this));
+              uint256 ethWithdrawn = amount * ethReserve / totalLiquidity;
+              uint256 tokensWithdrawn = amount * tokenReserve / totalLiquidity;
+              liquidity[msg.sender] -= amount;
+              totalLiquidity -= amount;
+              (bool sent, ) = payable(msg.sender).call{value: ethWithdrawn}("");
+              if (!sent) revert EthTransferFailed(msg.sender, ethWithdrawn);
+              if (!token.transfer(msg.sender, tokensWithdrawn)) revert TokenTransferFailed();
+              emit LiquidityRemoved(msg.sender, amount, tokensWithdrawn, ethWithdrawn);
+              return (ethWithdrawn, tokensWithdrawn);
+          }
+          ```
+      solution: |
+        // Events section:
+        event LiquidityProvided(address liquidityProvider, uint256 liquidityMinted, uint256 ethInput, uint256 tokensInput);
+        event LiquidityRemoved(address liquidityRemover, uint256 liquidityWithdrawn, uint256 tokensOutput, uint256 ethOutput);
+
+        // Errors section (add to existing):
+        error InsufficientLiquidity(uint256 available, uint256 required);
+
+        function deposit() public payable returns (uint256 tokensDeposited) {
+            if (msg.value == 0) revert InvalidEthAmount();
+            uint256 ethReserve = address(this).balance - msg.value;
+            uint256 tokenReserve = token.balanceOf(address(this));
+            uint256 tokenDeposit = (msg.value * tokenReserve / ethReserve) + 1;
+            uint256 bal = token.balanceOf(msg.sender);
+            if (bal < tokenDeposit) revert InsufficientTokenBalance(bal, tokenDeposit);
+            uint256 allow = token.allowance(msg.sender, address(this));
+            if (allow < tokenDeposit) revert InsufficientTokenAllowance(allow, tokenDeposit);
+            uint256 liquidityMinted = msg.value * totalLiquidity / ethReserve;
+            liquidity[msg.sender] += liquidityMinted;
+            totalLiquidity += liquidityMinted;
+            if (!token.transferFrom(msg.sender, address(this), tokenDeposit)) revert TokenTransferFailed();
+            emit LiquidityProvided(msg.sender, liquidityMinted, msg.value, tokenDeposit);
+            return tokenDeposit;
+        }
+
+        function withdraw(uint256 amount) public returns (uint256 ethAmount, uint256 tokenAmount) {
+            uint256 availableLp = liquidity[msg.sender];
+            if (availableLp < amount) revert InsufficientLiquidity(availableLp, amount);
+            uint256 ethReserve = address(this).balance;
+            uint256 tokenReserve = token.balanceOf(address(this));
+            uint256 ethWithdrawn = amount * ethReserve / totalLiquidity;
+            uint256 tokensWithdrawn = amount * tokenReserve / totalLiquidity;
+            liquidity[msg.sender] -= amount;
+            totalLiquidity -= amount;
+            (bool sent, ) = payable(msg.sender).call{value: ethWithdrawn}("");
+            if (!sent) revert EthTransferFailed(msg.sender, ethWithdrawn);
+            if (!token.transfer(msg.sender, tokensWithdrawn)) revert TokenTransferFailed();
+            emit LiquidityRemoved(msg.sender, amount, tokensWithdrawn, ethWithdrawn);
+            return (ethWithdrawn, tokensWithdrawn);
+        }
+
+completion_message: |
+  Congratulations — you've completed the DEX Challenge!
+
+  Your DEX contract can now:
+  - **Initialize a liquidity pool** with `init()` seeding ETH + $BAL reserves
+  - **Price trades** using the constant-product formula `x * y = k` with a 0.3% fee
+  - **Swap ETH for tokens** and **tokens for ETH** with proper validation
+  - **Accept deposits** from liquidity providers who earn trading fees
+  - **Process withdrawals** returning proportional ETH + $BAL
+
+  Key concepts you learned:
+  - Constant-product AMM formula and why it always has liquidity
+  - Integer math tricks (997/1000) to handle fees without decimals
+  - The `approve` + `transferFrom` pattern for ERC20 tokens
+  - Reserve calculation: `address(this).balance` includes `msg.value`
+  - LP tokens representing proportional pool ownership
+  - Rounding up with `+ 1` to prevent pool dilution
+
+  **The big takeaway:** A few simple formulas can create a fully functional decentralized exchange. The `x * y = k` curve automatically adjusts prices based on supply and demand — no order book needed!
+
+  ## Next Steps
+
+  To submit your challenge, complete the remaining checkpoints on the
+  [Speedrun Ethereum challenge page](https://speedrunethereum.com/challenge/dex):
+  - Deploy your contract
+  - Ship your frontend
+  - Verify your contract
